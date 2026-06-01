@@ -1,5 +1,7 @@
 # jq-workbench
 
+[![CI](https://github.com/hide5stm/jq-workbench-el/actions/workflows/ci.yml/badge.svg)](https://github.com/hide5stm/jq-workbench-el/actions/workflows/ci.yml)
+
 `jq-workbench` is a small SQL-mode inspired jq workbench for Emacs.
 
 Open a JSON or JSONL file, write a jq query in the lower query window, and press

@@ -58,7 +58,7 @@ Return nil when the current buffer is not visiting a file."
   (or (executable-find jq-workbench-command)
       (user-error "Could not find jq executable: %s" jq-workbench-command)))
 
-
+(declare-function jq-mode "jq-mode" ())
 (defun jq-workbench--query-mode ()
   "Enable a jq-oriented major mode for the query buffer.
 
