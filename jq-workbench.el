@@ -69,13 +69,26 @@ highlighting support."
       (jq-mode)
     (prog-mode)))
 
+(defun jq-workbench--try-major-mode (mode)
+  "Enable major MODE and return non-nil when it succeeds.
+
+Some modes, notably `json-ts-mode' on Emacs 29+, may be defined even
+when the required tree-sitter grammar is not installed.  In that case,
+MODE signals an error and jq-workbench should fall back to another JSON
+mode instead of failing the jq run."
+  (when (fboundp mode)
+    (condition-case nil
+        (progn
+          (funcall mode)
+          t)
+      (error nil))))
+
 (defun jq-workbench--result-mode ()
   "Enable a JSON-oriented major mode for a jq result buffer."
-  (cond
-   ((fboundp 'json-ts-mode) (json-ts-mode))
-   ((fboundp 'js-json-mode) (js-json-mode))
-   ((fboundp 'json-mode) (json-mode))
-   (t (fundamental-mode)))
+  (or (jq-workbench--try-major-mode 'json-ts-mode)
+      (jq-workbench--try-major-mode 'js-json-mode)
+      (jq-workbench--try-major-mode 'json-mode)
+      (fundamental-mode))
   (setq-local truncate-lines nil)
   (when (fboundp 'font-lock-ensure)
     (font-lock-ensure)))
