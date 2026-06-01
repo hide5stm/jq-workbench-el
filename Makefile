@@ -3,7 +3,7 @@ BATCH = $(EMACS) -Q --batch
 PACKAGE_INIT = -l package --eval "(package-initialize)"
 LISP = jq-workbench.el
 TESTS = tests/jq-workbench-test.el
-DEPS = jq-mode package-lint
+DEPS = package-lint
 
 .PHONY: all compile test checkdoc package-lint lint clean install-deps check-trailers
 

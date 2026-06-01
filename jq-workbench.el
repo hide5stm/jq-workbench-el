@@ -5,7 +5,7 @@
 ;; Author: Hideaki Igarashi <hide@5stm.net>
 ;; Maintainer: Hideaki Igarashi <hide@5stm.net>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "28.1") (jq-mode "0"))
+;; Package-Requires: ((emacs "28.1"))
 ;; Keywords: tools, convenience
 ;; URL: https://github.com/hideaki-igarashi/jq-workbench
 ;; SPDX-License-Identifier: MIT
@@ -16,12 +16,12 @@
 ;;
 ;; Open a JSON or JSONL file, run `jq-workbench-open', edit a jq query
 ;; in the lower window, and press \[jq-workbench-run] to update the result
-;; buffer.  The package is intentionally small: it delegates jq syntax
-;; highlighting to `jq-mode' and jq execution to the external jq command.
+;; buffer.  The package is intentionally small: it uses `jq-mode' for query
+;; highlighting when available and delegates jq execution to the external jq
+;; command.
 
 ;;; Code:
 
-(require 'jq-mode)
 (require 'subr-x)
 
 (defgroup jq-workbench nil
@@ -57,6 +57,17 @@ Return nil when the current buffer is not visiting a file."
   "Return the jq executable path or signal a user error."
   (or (executable-find jq-workbench-command)
       (user-error "Could not find jq executable: %s" jq-workbench-command)))
+
+
+(defun jq-workbench--query-mode ()
+  "Enable a jq-oriented major mode for the query buffer.
+
+Use `jq-mode' when it is installed.  Fall back to `prog-mode' so the
+package can still byte-compile and run without optional query
+highlighting support."
+  (if (require 'jq-mode nil t)
+      (jq-mode)
+    (prog-mode)))
 
 (defun jq-workbench--result-mode ()
   "Enable a JSON-oriented major mode for a jq result buffer."
@@ -168,7 +179,7 @@ file.  When called from Lisp with FILE, use FILE instead."
       (split-window-vertically result-height))
     (other-window 1)
     (switch-to-buffer query-buffer)
-    (jq-mode)
+    (jq-workbench--query-mode)
     (jq-workbench-mode 1)
     (setq-local jq-workbench-input-file input-file)
     (setq-local jq-workbench-result-buffer result-buffer)

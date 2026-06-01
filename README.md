@@ -9,7 +9,7 @@ Open a JSON or JSONL file, write a jq query in the lower query window, and press
 
 - SQL-mode-like split window workflow
 - Automatic input file detection from the current JSON/JSONL buffer
-- jq query buffer using `jq-mode`
+- jq query buffer using `jq-mode` when available
 - Result buffer with JSON highlighting where available
 - JSONL-friendly filtering with `select(...)`
 - Dedicated error buffer for jq syntax/runtime errors
@@ -19,7 +19,7 @@ Open a JSON or JSONL file, write a jq query in the lower query window, and press
 
 - Emacs 28.1 or later
 - [`jq`](https://jqlang.github.io/jq/)
-- [`jq-mode`](https://github.com/ljos/jq-mode)
+- [`jq-mode`](https://github.com/ljos/jq-mode) is optional but recommended for jq query highlighting
 
 ## Installation
 
@@ -32,7 +32,7 @@ Clone this repository and add it to your Emacs `load-path`:
 (require 'jq-workbench)
 ```
 
-Make sure `jq-mode` is also installed and loadable.
+For jq query highlighting, install `jq-mode` separately. `jq-workbench` still works without it, but the query buffer falls back to `prog-mode`.
 
 ### With use-package
 
