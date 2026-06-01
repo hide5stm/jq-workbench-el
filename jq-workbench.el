@@ -1,0 +1,155 @@
+;;; jq-workbench.el --- SQL-style jq workbench -*- lexical-binding: t; -*-
+
+;; Author: Hideaki Igarashi
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "28.1") (jq-mode "0"))
+;; Keywords: tools, json, jq
+;; URL: https://github.com/hideaki-igarashi/jq-workbench
+
+;;; Commentary:
+
+;; jq-workbench provides a SQL-mode inspired workflow for jq.
+;; Open a JSON or JSONL file, run `jq-workbench-open', edit a jq query
+;; in the lower window, and press C-c C-c to update the result buffer.
+
+;;; Code:
+
+(require 'jq-mode)
+
+(defgroup jq-workbench nil
+  "SQL-mode-like jq workbench."
+  :group 'tools)
+
+(defcustom jq-workbench-query-window-height 5
+  "Height of the jq query window created by `jq-workbench-open'."
+  :type 'integer
+  :group 'jq-workbench)
+
+(defvar-local jq-workbench-input-file nil
+  "Input JSON or JSONL file for jq workbench.")
+
+(defvar-local jq-workbench-result-buffer nil
+  "Result buffer for this jq workbench query buffer.")
+
+(defun jq-workbench--input-file-from-current-buffer ()
+  "Return current buffer file name as an expanded path, or nil."
+  (when buffer-file-name
+    (expand-file-name buffer-file-name)))
+
+(defun jq-workbench--result-mode ()
+  "Enable a JSON-ish major mode for jq result buffer."
+  (cond
+   ;; Emacs 29+
+   ((fboundp 'json-ts-mode) (json-ts-mode))
+   ;; Built into Emacs 27+ via js.el, available in Emacs 28.2.
+   ((fboundp 'js-json-mode) (js-json-mode))
+   ;; If the user installed json-mode.
+   ((fboundp 'json-mode) (json-mode))
+   (t (fundamental-mode)))
+  (setq-local truncate-lines nil)
+  (when (fboundp 'font-lock-ensure)
+    (font-lock-ensure)))
+
+(defun jq-workbench-set-input-file (file)
+  "Set input JSON or JSONL FILE for current jq query buffer."
+  (interactive "fInput JSON/JSONL file: ")
+  (setq-local jq-workbench-input-file (expand-file-name file))
+  (message "jq input: %s" jq-workbench-input-file))
+
+(defun jq-workbench-run ()
+  "Run current jq query against `jq-workbench-input-file'."
+  (interactive)
+  (unless jq-workbench-input-file
+    (call-interactively #'jq-workbench-set-input-file))
+  (let* ((input-file (expand-file-name jq-workbench-input-file))
+         (query (buffer-substring-no-properties (point-min) (point-max)))
+         (query-file (make-temp-file "jq-workbench-" nil ".jq"))
+         (error-file (make-temp-file "jq-workbench-error-"))
+         (result-buffer (or jq-workbench-result-buffer
+                            (get-buffer-create "*jq-result*")))
+         (error-buffer (get-buffer-create "*jq-error*")))
+    (unless (file-exists-p input-file)
+      (error "Input file does not exist: %s" input-file))
+    (with-temp-file query-file
+      (insert query))
+    (with-current-buffer result-buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)))
+    (with-current-buffer error-buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)))
+    (let ((status
+           (call-process "jq"
+                         nil
+                         `(,result-buffer ,error-file)
+                         nil
+                         "-f" query-file
+                         input-file)))
+      (unwind-protect
+          (if (= status 0)
+              (progn
+                (with-current-buffer result-buffer
+                  (jq-workbench--result-mode))
+                (display-buffer result-buffer))
+            (with-current-buffer error-buffer
+              (insert-file-contents error-file)
+              (special-mode))
+            (display-buffer error-buffer))
+        (ignore-errors (delete-file query-file))
+        (ignore-errors (delete-file error-file))))))
+
+;;;###autoload
+(define-minor-mode jq-workbench-mode
+  "Minor mode for SQL-mode-like jq execution."
+  :lighter " jq-wb"
+  :keymap (let ((map (make-sparse-keymap)))
+            (define-key map (kbd "C-c C-c") #'jq-workbench-run)
+            (define-key map (kbd "C-c C-f") #'jq-workbench-set-input-file)
+            map))
+
+;;;###autoload
+(defun jq-workbench-open (&optional file)
+  "Open SQL-mode-like jq workbench.
+
+When called from a file-visiting buffer, use that file as input.
+If FILE is supplied from Lisp, use FILE instead.
+If the current buffer is not visiting a file, prompt for an input file."
+  (interactive)
+  (let* ((input-file
+          (expand-file-name
+           (or file
+               (jq-workbench--input-file-from-current-buffer)
+               (read-file-name "Input JSON/JSONL file: "))))
+         (base-name (file-name-nondirectory input-file))
+         (result-buffer (get-buffer-create
+                         (format "*jq-result: %s*" base-name)))
+         (query-buffer (get-buffer-create
+                        (format "*jq-query: %s*" base-name))))
+    (unless (file-exists-p input-file)
+      (error "Input file does not exist: %s" input-file))
+    (delete-other-windows)
+    ;; Upper window: result.
+    (switch-to-buffer result-buffer)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert (format "Input: %s\n\n" input-file)))
+    (jq-workbench--result-mode)
+    ;; Lower window: query.  Keep it small, like SQL mode.
+    (let* ((total-height (window-total-height))
+           (query-height (min jq-workbench-query-window-height
+                              (max 3 (/ total-height 3))))
+           (result-height (max 1 (- total-height query-height))))
+      (split-window-vertically result-height))
+    (other-window 1)
+    (switch-to-buffer query-buffer)
+    (jq-mode)
+    (jq-workbench-mode 1)
+    (setq-local jq-workbench-input-file input-file)
+    (setq-local jq-workbench-result-buffer result-buffer)
+    (when (= (point-min) (point-max))
+      (insert ".\n"))
+    (message "jq input: %s" input-file)))
+
+(provide 'jq-workbench)
+
+;;; jq-workbench.el ends here

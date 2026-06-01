@@ -1,0 +1,5 @@
+{"type":"result","path":"videos/a.mp4","score":"0.95","action":"trim_copy","duration":7200}
+{"type":"result","path":"videos/b.mp4","score":"0.42","action":"no_match_unchanged","duration":7199}
+{"type":"progress","path":"videos/c.mp4","current":3,"total":10}
+{"type":"result","path":"videos/c.mp4","score":"0.12","action":"no_match_unchanged","duration":7201}
+{"type":"result","path":"videos/d.mp4","score":"1.00","action":"already_trimmed","duration":7080}
