@@ -1,7 +1,8 @@
+*.elc
+/.cask/
+/.eldev/
+/.emacs.d/
+/.package-lint-cache/
 *~
 \#*\#
-.#*
-*.elc
-auto-save-list/
-elpa/
 .DS_Store
