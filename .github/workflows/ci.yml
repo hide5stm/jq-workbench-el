@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  emacs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs-version:
+          - 28.2
+          - 29.4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Install Emacs
+        uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs-version }}
+      - name: Install Emacs package dependencies
+        run: make install-deps
+      - name: Byte compile
+        run: make compile
+      - name: Check documentation strings
+        run: make checkdoc
+      - name: Package lint
+        run: make package-lint
+      - name: Run tests
+        run: make test
