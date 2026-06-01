@@ -1,6 +1,8 @@
 EMACS ?= emacs
 BATCH = $(EMACS) -Q --batch
-PACKAGE_INIT = -l package --eval "(package-initialize)"
+PACKAGE_USER_DIR = $(CURDIR)/.elpa
+PACKAGE_SETUP = --eval "(setq package-user-dir \"$(PACKAGE_USER_DIR)\")"
+PACKAGE_INIT = $(PACKAGE_SETUP) -l package --eval "(package-initialize)"
 LISP = jq-workbench.el
 TESTS = tests/jq-workbench-test.el
 DEPS = package-lint
@@ -10,7 +12,7 @@ DEPS = package-lint
 all: lint test
 
 install-deps:
-	$(BATCH) -l package --eval "(progn (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t) (package-initialize) (unless package-archive-contents (package-refresh-contents)) (dolist (pkg '($(DEPS))) (unless (package-installed-p pkg) (package-install pkg))))"
+	$(BATCH) $(PACKAGE_SETUP) -l package --eval "(progn (add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\") t) (package-initialize) (unless package-archive-contents (package-refresh-contents)) (dolist (pkg '($(DEPS))) (unless (package-installed-p pkg) (package-install pkg))))"
 
 compile: install-deps
 	$(BATCH) -L . $(PACKAGE_INIT) -f batch-byte-compile $(LISP)
@@ -31,3 +33,6 @@ check-trailers:
 
 clean:
 	rm -f *.elc
+
+clean-deps:
+	rm -rf .elpa
