@@ -1,5 +1,8 @@
 # TODO
 
+This file tracks remaining work only. Completed user-facing features are
+recorded in `CHANGELOG.md`.
+
 ## Before public GitHub release
 
 - [ ] Replace placeholder repository URLs in:
@@ -30,13 +33,24 @@
 
 ## Future features
 
-- [x] Dired integration: open jq workbench for file at point.
-- [x] Query history with `M-p` / `M-n`.
-- [x] Asynchronous jq execution for large inputs.
-- [ ] Optional auto-run after idle delay.
-- [x] Save and load named jq queries.
+### Responsiveness and large inputs
+
 - [ ] Streaming/progress UI for very large outputs.
+- [ ] Optional auto-run after idle delay.
+- [ ] Result size controls, for example truncation, paging, or line limits.
+
+### Output modes and export
+
 - [ ] Result export command.
 - [ ] Better support for raw output modes such as `@tsv` and `@csv`.
+- [ ] jq option presets, for example `-r`, `-c`, `-s`, and `--arg`.
+
+### Workspace layout
+
 - [ ] Optional three-pane layout: source JSON, jq query, result.
-- [x] jq error navigation.
+- [ ] Command to switch the input JSON/JSONL file without reopening the workbench.
+
+### Query management
+
+- [ ] Query library browser for saved named queries.
+- [ ] Per-project or per-input-file query history.
