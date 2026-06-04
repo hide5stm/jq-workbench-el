@@ -13,12 +13,19 @@
       (ignore-errors (kill-buffer (find-buffer-visiting file)))
       (ignore-errors (delete-file file)))))
 
+(defun jq-workbench-test--wait-for-process (buffer)
+  "Wait for the jq process associated with BUFFER to finish."
+  (with-current-buffer buffer
+    (while (jq-workbench-running-p)
+      (accept-process-output jq-workbench--process 0.1))))
+
 (ert-deftest jq-workbench-run-basic-query-test ()
-  "Run a basic jq query against a temporary JSONL file."
+  "Run a basic jq query asynchronously against a temporary JSONL file."
   (skip-unless (executable-find jq-workbench-command))
   (let ((file (make-temp-file "jq-workbench-test-" nil ".jsonl"))
         (query-buffer (generate-new-buffer " *jq-workbench-test-query*"))
-        (result-buffer (generate-new-buffer " *jq-workbench-test-result*")))
+        (result-buffer (generate-new-buffer " *jq-workbench-test-result*"))
+        (error-buffer (generate-new-buffer " *jq-workbench-test-error*")))
     (unwind-protect
         (progn
           (with-temp-file file
@@ -28,12 +35,15 @@
             (insert "select(.type == \"result\") | {path, score}\n")
             (setq-local jq-workbench-input-file file)
             (setq-local jq-workbench-result-buffer result-buffer)
+            (setq-local jq-workbench-error-buffer error-buffer)
             (jq-workbench-run))
+          (jq-workbench-test--wait-for-process query-buffer)
           (with-current-buffer result-buffer
             (should (string-match-p "a\\.mp4" (buffer-string)))
             (should-not (string-match-p "b\\.mp4" (buffer-string)))))
       (ignore-errors (kill-buffer query-buffer))
       (ignore-errors (kill-buffer result-buffer))
+      (ignore-errors (kill-buffer error-buffer))
       (ignore-errors (delete-file file)))))
 
 (ert-deftest jq-workbench-query-history-test ()
@@ -73,6 +83,11 @@
   (with-temp-buffer
     (insert "jq: error: syntax error at <top-level>, line 12:\n")
     (should (= 12 (jq-workbench--first-error-line)))))
+
+(ert-deftest jq-workbench-cancel-without-process-test ()
+  "Signal a user error when there is no process to cancel."
+  (with-temp-buffer
+    (should-error (jq-workbench-cancel) :type 'user-error)))
 
 (provide 'jq-workbench-test)
 

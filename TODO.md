@@ -32,8 +32,10 @@
 
 - [x] Dired integration: open jq workbench for file at point.
 - [x] Query history with `M-p` / `M-n`.
+- [x] Asynchronous jq execution for large inputs.
 - [ ] Optional auto-run after idle delay.
 - [x] Save and load named jq queries.
+- [ ] Streaming/progress UI for very large outputs.
 - [ ] Result export command.
 - [ ] Better support for raw output modes such as `@tsv` and `@csv`.
 - [ ] Optional three-pane layout: source JSON, jq query, result.

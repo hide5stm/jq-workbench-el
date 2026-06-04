@@ -53,6 +53,18 @@
   :type 'directory
   :group 'jq-workbench)
 
+(defcustom jq-workbench-result-font-lock-max-bytes 1048576
+  "Maximum result buffer size for immediate font-locking.
+
+Large jq outputs can be expensive to fontify.  When the result buffer is
+larger than this value, jq-workbench still selects a JSON-oriented major
+mode but skips immediate `font-lock-ensure'.  Set this to nil to always
+fontify result buffers."
+  :type '(choice (const :tag "Always fontify" nil)
+                 integer)
+  :safe (lambda (value) (or (null value) (integerp value)))
+  :group 'jq-workbench)
+
 (defvar jq-workbench-query-history nil
   "History list of jq queries run in jq-workbench buffers.")
 
@@ -64,6 +76,12 @@
 
 (defvar-local jq-workbench-error-buffer nil
   "Error buffer associated with the current jq workbench query buffer.")
+
+(defvar-local jq-workbench--process nil
+  "Running jq process associated with the current jq workbench query buffer.")
+
+(defvar-local jq-workbench--query-file nil
+  "Temporary jq query file associated with the current jq process.")
 
 (defvar-local jq-workbench--history-index nil
   "Current index into `jq-workbench-query-history' for this query buffer.")
@@ -115,7 +133,9 @@ mode instead of failing the jq run."
       (jq-workbench--try-major-mode 'json-mode)
       (fundamental-mode))
   (setq-local truncate-lines nil)
-  (when (fboundp 'font-lock-ensure)
+  (when (and (fboundp 'font-lock-ensure)
+             (or (null jq-workbench-result-font-lock-max-bytes)
+                 (<= (buffer-size) jq-workbench-result-font-lock-max-bytes)))
     (font-lock-ensure)))
 
 (defun jq-workbench--buffer-query ()
@@ -162,36 +182,99 @@ mode instead of failing the jq run."
   (jq-workbench--replace-query
    (nth jq-workbench--history-index jq-workbench-query-history)))
 
-(defun jq-workbench--execute-query (jq-command query input-file result-buffer error-buffer)
-  "Run JQ-COMMAND with QUERY against INPUT-FILE.
+(defun jq-workbench--cleanup-process (process)
+  "Clean up temporary files associated with PROCESS."
+  (let ((query-file (process-get process 'jq-workbench-query-file)))
+    (when query-file
+      (ignore-errors (delete-file query-file)))))
+
+(defun jq-workbench--process-sentinel (process event)
+  "Handle jq PROCESS status changes described by EVENT."
+  (when (memq (process-status process) '(exit signal))
+    (jq-workbench--cleanup-process process)
+    (let ((query-buffer (process-get process 'jq-workbench-query-buffer))
+          (result-buffer (process-get process 'jq-workbench-result-buffer))
+          (error-buffer (process-get process 'jq-workbench-error-buffer))
+          (exit-status (process-exit-status process)))
+      (when (buffer-live-p query-buffer)
+        (with-current-buffer query-buffer
+          (when (eq jq-workbench--process process)
+            (setq jq-workbench--process nil
+                  jq-workbench--query-file nil))))
+      (cond
+       ((process-get process 'jq-workbench-cancelled)
+        (message "jq cancelled"))
+       ((and (eq (process-status process) 'exit) (= exit-status 0))
+        (when (buffer-live-p result-buffer)
+          (with-current-buffer result-buffer
+            (jq-workbench--result-mode))
+          (display-buffer result-buffer))
+        (message "jq finished"))
+       ((string-match-p "finished" event)
+        (message "jq finished"))
+       (t
+        (when (buffer-live-p error-buffer)
+          (with-current-buffer error-buffer
+            (goto-char (point-max))
+            (unless (bolp)
+              (insert "\n"))
+            (insert (format "jq process %s" event))
+            (special-mode)
+            (setq-local jq-workbench--query-buffer query-buffer)
+            (local-set-key (kbd "RET") #'jq-workbench-goto-error)
+            (local-set-key (kbd "g") #'jq-workbench-goto-error))
+          (display-buffer error-buffer))
+        (message "jq failed: %s" (string-trim-right event)))))))
+
+(defun jq-workbench--execute-query (jq-command query input-file result-buffer error-buffer query-buffer)
+  "Run JQ-COMMAND asynchronously with QUERY against INPUT-FILE.
 
 Write standard output to RESULT-BUFFER and standard error to
-ERROR-BUFFER.  Return the jq process exit status."
-  (let ((query-file (make-temp-file "jq-workbench-" nil ".jq"))
-        (error-file (make-temp-file "jq-workbench-error-")))
+ERROR-BUFFER.  QUERY-BUFFER is used for process bookkeeping and jq error
+navigation.  Return the started process."
+  (let ((query-file (make-temp-file "jq-workbench-" nil ".jq")))
     (with-temp-file query-file
       (insert query)
       (insert "\n"))
     (with-current-buffer result-buffer
       (let ((inhibit-read-only t))
+        (setq buffer-read-only nil)
         (erase-buffer)))
     (with-current-buffer error-buffer
       (let ((inhibit-read-only t))
+        (setq buffer-read-only nil)
         (erase-buffer)))
-    (unwind-protect
-        (let ((status
-               (call-process jq-command
-                             nil
-                             `(,result-buffer ,error-file)
-                             nil
-                             "-f" query-file
-                             input-file)))
-          (unless (= status 0)
-            (with-current-buffer error-buffer
-              (insert-file-contents error-file)))
-          status)
-      (ignore-errors (delete-file query-file))
-      (ignore-errors (delete-file error-file)))))
+    (let ((process
+           (make-process
+            :name "jq-workbench"
+            :buffer result-buffer
+            :command (list jq-command "-f" query-file input-file)
+            :stderr error-buffer
+            :noquery t
+            :sentinel #'jq-workbench--process-sentinel)))
+      (process-put process 'jq-workbench-query-file query-file)
+      (process-put process 'jq-workbench-query-buffer query-buffer)
+      (process-put process 'jq-workbench-result-buffer result-buffer)
+      (process-put process 'jq-workbench-error-buffer error-buffer)
+      (with-current-buffer query-buffer
+        (setq-local jq-workbench--process process
+                    jq-workbench--query-file query-file))
+      process)))
+
+(defun jq-workbench-running-p ()
+  "Return non-nil when a jq process is running for the current query buffer."
+  (and jq-workbench--process
+       (process-live-p jq-workbench--process)))
+
+;;;###autoload
+(defun jq-workbench-cancel ()
+  "Cancel the running jq process for the current query buffer."
+  (interactive)
+  (unless (jq-workbench-running-p)
+    (user-error "No jq process is running"))
+  (process-put jq-workbench--process 'jq-workbench-cancelled t)
+  (delete-process jq-workbench--process)
+  (message "jq cancelled"))
 
 ;;;###autoload
 (defun jq-workbench-set-input-file (file)
@@ -202,7 +285,7 @@ ERROR-BUFFER.  Return the jq process exit status."
 
 ;;;###autoload
 (defun jq-workbench-run ()
-  "Run the current jq query against `jq-workbench-input-file'."
+  "Run the current jq query asynchronously against `jq-workbench-input-file'."
   (interactive)
   (unless jq-workbench-input-file
     (call-interactively #'jq-workbench-set-input-file))
@@ -212,30 +295,25 @@ ERROR-BUFFER.  Return the jq process exit status."
          (result-buffer (or jq-workbench-result-buffer
                             (get-buffer-create "*jq-result*")))
          (error-buffer (or jq-workbench-error-buffer
-                           (get-buffer-create "*jq-error*"))))
+                           (get-buffer-create "*jq-error*")))
+         (query-buffer (current-buffer)))
     (unless (file-exists-p input-file)
       (user-error "Input file does not exist: %s" input-file))
     (when (string-empty-p query)
       (user-error "jq query is empty"))
+    (when (jq-workbench-running-p)
+      (delete-process jq-workbench--process))
     (jq-workbench--add-query-history query)
     (setq jq-workbench--history-index nil)
-    (let ((status (jq-workbench--execute-query jq-command
-                                               query
-                                               input-file
-                                               result-buffer
-                                               error-buffer))
-          (query-buffer (current-buffer)))
-      (if (= status 0)
-          (progn
-            (with-current-buffer result-buffer
-              (jq-workbench--result-mode))
-            (display-buffer result-buffer))
-        (with-current-buffer error-buffer
-          (special-mode)
-          (setq-local jq-workbench--query-buffer query-buffer)
-          (local-set-key (kbd "RET") #'jq-workbench-goto-error)
-          (local-set-key (kbd "g") #'jq-workbench-goto-error))
-        (display-buffer error-buffer)))))
+    (with-current-buffer error-buffer
+      (setq-local jq-workbench--query-buffer query-buffer))
+    (jq-workbench--execute-query jq-command
+                                 query
+                                 input-file
+                                 result-buffer
+                                 error-buffer
+                                 query-buffer)
+    (message "jq started: %s" input-file)))
 
 (defun jq-workbench--current-query-buffer ()
   "Return the query buffer associated with the current buffer."
@@ -315,6 +393,7 @@ ERROR-BUFFER.  Return the jq process exit status."
   :keymap (let ((map (make-sparse-keymap)))
             (define-key map (kbd "C-c C-c") #'jq-workbench-run)
             (define-key map (kbd "C-c C-f") #'jq-workbench-set-input-file)
+            (define-key map (kbd "C-c C-k") #'jq-workbench-cancel)
             (define-key map (kbd "C-c C-s") #'jq-workbench-save-query)
             (define-key map (kbd "C-c C-l") #'jq-workbench-load-query)
             (define-key map (kbd "M-p") #'jq-workbench-history-previous)

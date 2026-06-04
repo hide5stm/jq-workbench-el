@@ -5,7 +5,7 @@
 `jq-workbench` is a small SQL-mode inspired jq workbench for Emacs.
 
 Open a JSON or JSONL file, write a jq query in the lower query window, and press
-`C-c C-c` to update the result window.
+`C-c C-c` to update the result window asynchronously.
 
 ## Features
 
@@ -14,6 +14,7 @@ Open a JSON or JSONL file, write a jq query in the lower query window, and press
 - jq query buffer using `jq-mode` when available
 - Result buffer with JSON highlighting where available
 - JSONL-friendly filtering with `select(...)`
+- Asynchronous jq execution, so large inputs do not block Emacs while jq is running
 - Dedicated error buffer for jq syntax/runtime errors
 - Query history with `M-p` / `M-n`
 - Named jq query save/load commands
@@ -125,6 +126,7 @@ Inside `jq-workbench-mode`:
 | --- | --- | --- |
 | `C-c C-c` | `jq-workbench-run` | Run the current jq query |
 | `C-c C-f` | `jq-workbench-set-input-file` | Select another input JSON/JSONL file |
+| `C-c C-k` | `jq-workbench-cancel` | Cancel the running jq process |
 | `C-c C-s` | `jq-workbench-save-query` | Save the current jq query by name |
 | `C-c C-l` | `jq-workbench-load-query` | Load a named jq query |
 | `M-p` | `jq-workbench-history-previous` | Insert the previous query from history |
@@ -144,6 +146,18 @@ Set the jq executable path:
 
 ```elisp
 (setq jq-workbench-command "/usr/bin/jq")
+```
+
+Skip immediate font-locking for large result buffers.  The default is 1 MiB:
+
+```elisp
+(setq jq-workbench-result-font-lock-max-bytes 1048576)
+```
+
+Set it to nil to always fontify jq results:
+
+```elisp
+(setq jq-workbench-result-font-lock-max-bytes nil)
 ```
 
 ## Development
