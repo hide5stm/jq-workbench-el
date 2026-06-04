@@ -16,9 +16,8 @@ Open a JSON or JSONL file, write a jq query in the lower query window, and press
 - JSONL-friendly filtering with `select(...)`
 - Dedicated error buffer for jq syntax/runtime errors
 - Query history with `M-p` / `M-n`
-- Dired integration for opening the file at point
-- Save and load named jq queries
-- Error-line navigation from jq error buffers
+- Named jq query save/load commands
+- Optional Dired integration via `jq-workbench-dired-mode`
 - Small query window, configurable via `jq-workbench-query-window-height`
 
 ## Requirements
@@ -44,7 +43,8 @@ For jq query highlighting, install `jq-mode` separately. `jq-workbench` still wo
 
 ```elisp
 (use-package jq-workbench
-  :load-path "~/path/to/jq-workbench")
+  :load-path "~/path/to/jq-workbench"
+  :hook (dired-mode . jq-workbench-dired-mode))
 ```
 
 ## Usage
@@ -125,14 +125,12 @@ Inside `jq-workbench-mode`:
 | --- | --- | --- |
 | `C-c C-c` | `jq-workbench-run` | Run the current jq query |
 | `C-c C-f` | `jq-workbench-set-input-file` | Select another input JSON/JSONL file |
-| `M-p` | `jq-workbench-history-previous` | Insert the previous jq query history item |
-| `M-n` | `jq-workbench-history-next` | Insert the next jq query history item |
-| `C-c C-s` | `jq-workbench-save-query` | Save the current query by name |
-| `C-c C-l` | `jq-workbench-load-query` | Load a saved query by name |
+| `C-c C-s` | `jq-workbench-save-query` | Save the current jq query by name |
+| `C-c C-l` | `jq-workbench-load-query` | Load a named jq query |
+| `M-p` | `jq-workbench-history-previous` | Insert the previous query from history |
+| `M-n` | `jq-workbench-history-next` | Insert the next query from history |
 
-In Dired, press `W` on a JSON/JSONL file to open a workbench for the file at point.
-
-When jq reports an error, the error buffer supports `RET` or `g` to jump to the reported query line when jq includes a line number.
+Inside Dired, enable `jq-workbench-dired-mode` and press `W` on a file to open it in jq-workbench.
 
 ## Customization
 
@@ -140,12 +138,6 @@ Set the query window height:
 
 ```elisp
 (setq jq-workbench-query-window-height 5)
-```
-
-Set the saved-query directory:
-
-```elisp
-(setq jq-workbench-query-directory "~/.emacs.d/jq-workbench/queries/")
 ```
 
 Set the jq executable path:

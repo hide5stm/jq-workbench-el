@@ -24,7 +24,6 @@
 
 (require 'subr-x)
 (declare-function dired-get-file-for-visit "dired" ())
-(defvar dired-mode-map)
 
 (defgroup jq-workbench nil
   "SQL-mode-like jq workbench."
@@ -370,6 +369,21 @@ file.  When called from Lisp with FILE, use FILE instead."
       (insert ".\n"))
     (message "jq input: %s" input-file)))
 
+(defvar jq-workbench-dired-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "W") #'jq-workbench-dired-open)
+    map)
+  "Keymap used by `jq-workbench-dired-mode'.")
+
+;;;###autoload
+(define-minor-mode jq-workbench-dired-mode
+  "Minor mode adding jq-workbench commands to Dired buffers."
+  :lighter " jq-wb"
+  :keymap jq-workbench-dired-mode-map
+  (unless (derived-mode-p 'dired-mode)
+    (jq-workbench-dired-mode -1)
+    (user-error "`jq-workbench-dired-mode' is intended for Dired buffers")))
+
 ;;;###autoload
 (defun jq-workbench-dired-open ()
   "Open `jq-workbench' for the file at point in Dired."
@@ -377,9 +391,6 @@ file.  When called from Lisp with FILE, use FILE instead."
   (unless (derived-mode-p 'dired-mode)
     (user-error "This command is intended for Dired buffers"))
   (jq-workbench-open (dired-get-file-for-visit)))
-
-(with-eval-after-load 'dired
-  (define-key dired-mode-map (kbd "W") #'jq-workbench-dired-open))
 
 (provide 'jq-workbench)
 
